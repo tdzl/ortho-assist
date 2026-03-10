@@ -9,10 +9,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    console.error('ANTHROPIC_API_KEY environment variable is not set');
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
-  }
+  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
   const body = JSON.stringify({
     model: 'claude-sonnet-4-20250514',
@@ -20,8 +17,6 @@ export default async function handler(req, res) {
     system: req.body.system,
     messages: req.body.messages,
   });
-
-  console.log('Calling Anthropic API...');
 
   return new Promise((resolve) => {
     const options = {
@@ -40,13 +35,10 @@ export default async function handler(req, res) {
       let data = '';
       response.on('data', chunk => { data += chunk; });
       response.on('end', () => {
-        console.log('Anthropic status:', response.statusCode);
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) console.error('Anthropic error:', parsed.error);
           res.status(response.statusCode).json(parsed);
-        } catch (e) {
-          console.error('Failed to parse response:', data.slice(0, 200));
+        } catch {
           res.status(500).json({ error: 'Failed to parse Anthropic response' });
         }
         resolve();
@@ -54,7 +46,6 @@ export default async function handler(req, res) {
     });
 
     request.on('error', (err) => {
-      console.error('HTTPS request error:', err.message);
       res.status(500).json({ error: err.message });
       resolve();
     });

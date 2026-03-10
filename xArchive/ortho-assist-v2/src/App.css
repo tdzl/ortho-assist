@@ -204,9 +204,8 @@ body { background:var(--bg); font-family:'Geist',sans-serif; color:var(--text); 
 .ex-duration { font-size:12px; color:var(--teal); background:var(--teal-dim); padding:3px 9px; border-radius:20px; }
 .ex-expand { color:var(--muted); font-size:18px; transition:transform 0.2s; margin-left:4px; }
 .ex-expand.open { transform:rotate(180deg); }
-.exercise-detail { padding:0 16px 14px 16px; font-size:13px; color:var(--muted2); line-height:1.6; font-weight:300; border-top:1px solid var(--border); padding-top:14px; }
+.exercise-detail { padding:0 16px 14px 50px; font-size:13px; color:var(--muted2); line-height:1.6; font-weight:300; border-top:1px solid var(--border); padding-top:12px; }
 .exercise-detail .benefit { margin-top:8px; font-size:12px; color:var(--teal); font-style:italic; }
-.exercise-illus-panel { max-width:280px; margin:0 auto 14px; }
 
 /* ── SESSION COMPLETE ── */
 .session-complete-bar {

@@ -17,8 +17,7 @@ Ask targeted follow-up questions (1-2 at a time) to understand the user's condit
       "name": "Exercise name",
       "duration": "30 seconds / 10 reps",
       "instructions": "Step-by-step instructions",
-      "benefit": "Why this specific exercise helps this condition",
-      "illustrationType": "one type from the allowed list"
+      "benefit": "Why this specific exercise helps this condition"
     }
   ],
   "frequency": "Daily / 3x per week",
@@ -26,10 +25,7 @@ Ask targeted follow-up questions (1-2 at a time) to understand the user's condit
 }
 </CASE_DATA>
 
-Include 4-6 exercises. For each exercise choose the best illustrationType from this exact list:
-supine_knee_chest, supine_bridge, prone_press, side_lying_clam, quadruped_bird_dog, quadruped_cat_cow, seated_stretch, seated_leg, standing_quad, standing_calf, standing_hamstring, wall_slide, shoulder_pendulum, neck_tilt, plank, ankle_pump, standing_balance, doorway_stretch
-
-Until you have enough info, ask conversational questions. When you do output the JSON, also write a brief friendly message before the <CASE_DATA> tag summarizing your assessment.`;
+Include 4-6 exercises. Until you have enough info, ask conversational questions. When you do output the JSON, also write a brief friendly message before the <CASE_DATA> tag summarizing your assessment.`;
 
 const ADAPTATION_SYSTEM = `You are an expert orthopedic and sports medicine AI. Based on a patient's pain tracking data, analyze their progress and recommend adjustments to their exercise routine.
 
@@ -72,7 +68,10 @@ async function callClaude(messages, system) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ system, messages })
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `API error ${res.status}`);
+  }
   const data = await res.json();
   return data.content?.map(c => c.text || "").join("") || "";
 }
@@ -87,471 +86,28 @@ function stripCaseData(text) {
   return text.replace(/<CASE_DATA>[\s\S]*?<\/CASE_DATA>/g, "").trim();
 }
 
-// ─── STORAGE ────────────────────────────────────────────────────────────────
+// ─── STORAGE (localStorage) ─────────────────────────────────────────────────
 
 async function loadCases() {
-  try { const r = localStorage.getItem("ortho-cases"); return r ? JSON.parse(r) : []; } catch { return []; }
+  try {
+    const r = localStorage.getItem("ortho-cases");
+    return r ? JSON.parse(r) : [];
+  } catch { return []; }
 }
+
 async function saveCases(cases) {
   try { localStorage.setItem("ortho-cases", JSON.stringify(cases)); } catch {}
 }
+
 async function loadCheckins() {
-  try { const r = localStorage.getItem("ortho-checkins"); return r ? JSON.parse(r) : []; } catch { return []; }
+  try {
+    const r = localStorage.getItem("ortho-checkins");
+    return r ? JSON.parse(r) : [];
+  } catch { return []; }
 }
+
 async function saveCheckins(checkins) {
   try { localStorage.setItem("ortho-checkins", JSON.stringify(checkins)); } catch {}
-}
-
-// ─── EXERCISE ILLUSTRATIONS ──────────────────────────────────────────────────
-// Pure rAF-driven animation: React state → SVG transform attribute.
-// No CSS transforms, no SMIL. Works in every environment.
-
-const T  = '#2dd4bf';
-const T2 = 'rgba(45,212,191,0.45)';
-const SW = 3;
-
-// Hook: returns a value that oscillates 0→1→0 on a sine wave
-function useOsc(periodMs = 3000, phase = 0) {
-  const [val, setVal] = useState(0);
-  const rafRef = useRef(null);
-  const startRef = useRef(null);
-  useEffect(() => {
-    const tick = (now) => {
-      if (!startRef.current) startRef.current = now;
-      const t = ((now - startRef.current + phase) % periodMs) / periodMs;
-      // ease-in-out sine
-      setVal(Math.sin(t * Math.PI));
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [periodMs, phase]);
-  return val;
-}
-
-// Lerp helper
-const lerp = (a, b, t) => a + (b - a) * t;
-
-const C = '#2dd4bf';
-const Head  = ({cx,cy,r=9})      => <circle cx={cx} cy={cy} r={r} fill="none" stroke={C} strokeWidth={SW}/>;
-const Joint = ({cx,cy,r=4})      => <circle cx={cx} cy={cy} r={r} fill={C}/>;
-const Seg   = ({x1,y1,x2,y2})   => <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={C} strokeWidth={SW} strokeLinecap="round"/>;
-const Floor = ({y,x1=8,x2=192}) => <line x1={x1} y1={y} x2={x2} y2={y} stroke="rgba(45,212,191,0.25)" strokeWidth={1.5}/>;
-const Wall  = ({x,y1=5,y2=115}) => <line x1={x} y1={y1} x2={x} y2={y2} stroke="rgba(45,212,191,0.3)" strokeWidth={2}/>;
-
-const rot = (cx,cy,deg) => `rotate(${deg},${cx},${cy})`;
-const tr  = (dx,dy)     => `translate(${dx},${dy})`;
-
-function IllusWrap({label, children}) {
-  return (
-    <div style={{margin:'0 0 14px'}}>
-      <div style={{background:'rgba(45,212,191,0.05)',border:'1px solid rgba(45,212,191,0.18)',borderRadius:'12px',padding:'14px 10px 10px',display:'flex',flexDirection:'column',alignItems:'center'}}>
-        <svg viewBox="0 0 200 115" width="100%" style={{maxWidth:'280px',display:'block'}}>
-          {children}
-        </svg>
-      </div>
-      <div style={{textAlign:'center',fontSize:'10px',color:'var(--muted)',letterSpacing:'.6px',textTransform:'uppercase',marginTop:'5px'}}>{label}</div>
-    </div>
-  );
-}
-
-// 1 ── Supine knee-to-chest
-function IllusSupineKneeChest() {
-  const t = useOsc(2800);
-  const kneeDeg = lerp(0, -30, t);
-  return (
-    <IllusWrap label="Supine knee-to-chest">
-      <Floor y={98}/>
-      <Head cx={22} cy={82}/><Seg x1={31} y1={82} x2={105} y2={82}/>
-      <Seg x1={62} y1={77} x2={80} y2={66}/><Seg x1={80} y1={66} x2={100} y2={58}/>
-      <Seg x1={62} y1={88} x2={80} y2={93}/><Seg x1={80} y1={93} x2={95} y2={96}/>
-      <Seg x1={105} y1={86} x2={148} y2={90}/><Seg x1={148} y1={90} x2={182} y2={92}/>
-      <Joint cx={105} cy={82}/><Joint cx={62} cy={82}/>
-      <g transform={rot(105,82,kneeDeg)}>
-        <Seg x1={105} y1={82} x2={132} y2={60}/>
-        <Seg x1={132} y1={60} x2={106} y2={51}/>
-        <Joint cx={132} cy={60}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 2 ── Glute bridge
-function IllusSupineBridge() {
-  const t = useOsc(2500);
-  const dy = lerp(0, -11, t);
-  return (
-    <IllusWrap label="Glute bridge">
-      <Floor y={100}/>
-      <Head cx={20} cy={84}/><Seg x1={29} y1={84} x2={68} y2={83}/>
-      <Seg x1={44} y1={79} x2={32} y2={94}/><Seg x1={44} y1={89} x2={58} y2={99}/>
-      <g transform={tr(0,dy)}>
-        <Seg x1={68} y1={83} x2={108} y2={69}/>
-        <Joint cx={68} cy={83}/><Joint cx={108} cy={69}/>
-      </g>
-      <Seg x1={108} y1={69} x2={133} y2={90}/><Seg x1={133} y1={90} x2={130} y2={100}/>
-      <Seg x1={111} y1={72} x2={138} y2={92}/><Seg x1={138} y1={92} x2={144} y2={100}/>
-      <Joint cx={133} cy={90}/>
-    </IllusWrap>
-  );
-}
-
-// 3 ── Prone press-up
-function IllusPronePress() {
-  const t = useOsc(3000);
-  const deg = lerp(0, -20, t);
-  return (
-    <IllusWrap label="Prone press-up">
-      <Floor y={98}/>
-      <Seg x1={100} y1={96} x2={148} y2={97}/><Seg x1={148} y1={97} x2={185} y2={98}/>
-      <Joint cx={100} cy={96}/>
-      <g transform={rot(100,96,deg)}>
-        <Seg x1={58} y1={82} x2={100} y2={96}/>
-        <Head cx={43} cy={70}/>
-        <Seg x1={70} y1={88} x2={52} y2={75}/><Seg x1={52} y1={75} x2={50} y2={98}/>
-        <Seg x1={85} y1={91} x2={74} y2={80}/><Seg x1={74} y1={80} x2={76} y2={98}/>
-        <Joint cx={52} cy={75}/><Joint cx={74} cy={80}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 4 ── Clamshell
-function IllusSideLyingClam() {
-  const t = useOsc(2600);
-  const deg = lerp(0, -30, t);
-  return (
-    <IllusWrap label="Clamshell">
-      <Floor y={98}/>
-      <Head cx={22} cy={72}/><Seg x1={31} y1={76} x2={105} y2={85}/>
-      <Seg x1={48} y1={72} x2={38} y2={59}/><Seg x1={60} y1={79} x2={70} y2={68}/><Seg x1={70} y1={68} x2={82} y2={64}/>
-      <Seg x1={105} y1={85} x2={142} y2={93}/><Seg x1={142} y1={93} x2={180} y2={97}/>
-      <Joint cx={142} cy={93}/>
-      <g transform={rot(105,85,deg)}>
-        <Seg x1={105} y1={85} x2={140} y2={88}/><Seg x1={140} y1={88} x2={178} y2={92}/>
-        <Joint cx={140} cy={88}/>
-      </g>
-      <Joint cx={105} cy={85}/>
-    </IllusWrap>
-  );
-}
-
-// 5 ── Bird-dog
-function IllusQuadrupedBirdDog() {
-  const t = useOsc(3200);
-  const deg = lerp(0, -16, t);
-  return (
-    <IllusWrap label="Bird-dog">
-      <Floor y={101}/>
-      <Head cx={30} cy={60}/><Seg x1={39} y1={65} x2={145} y2={72}/>
-      <Seg x1={64} y1={68} x2={61} y2={101}/><Seg x1={122} y1={71} x2={118} y2={101}/><Seg x1={93} y1={70} x2={90} y2={101}/>
-      <g transform={rot(64,68,deg)}>
-        <Seg x1={64} y1={64} x2={30} y2={58}/><Seg x1={30} y1={58} x2={10} y2={55}/>
-        <Joint cx={30} cy={58}/>
-      </g>
-      <g transform={rot(122,71,-deg)}>
-        <Seg x1={122} y1={71} x2={158} y2={65}/><Seg x1={158} y1={65} x2={186} y2={62}/>
-        <Joint cx={158} cy={65}/>
-      </g>
-      <Joint cx={64} cy={68}/><Joint cx={93} cy={70}/><Joint cx={122} cy={71}/>
-    </IllusWrap>
-  );
-}
-
-// 6 ── Cat-cow
-function IllusQuadrupedCatCow() {
-  const t = useOsc(2800);
-  const dy = lerp(0, -8, t);
-  const d = `M 42 ${lerp(70,62,t)} Q 100 ${lerp(58,44,t)} 150 ${lerp(72,66,t)}`;
-  return (
-    <IllusWrap label="Cat-cow">
-      <Floor y={101}/>
-      <Head cx={30} cy={lerp(60,54,t)}/>
-      <path d={d} fill="none" stroke={C} strokeWidth={SW} strokeLinecap="round"/>
-      <Seg x1={64} y1={72} x2={61} y2={101}/><Seg x1={122} y1={74} x2={118} y2={101}/>
-      <Seg x1={44} y1={68} x2={44} y2={101}/><Seg x1={90} y1={70} x2={87} y2={101}/>
-      <Joint cx={64} cy={70}/><Joint cx={90} cy={70}/><Joint cx={122} cy={72}/>
-    </IllusWrap>
-  );
-}
-
-// 7 ── Seated stretch
-function IllusSeatedStretch() {
-  const t = useOsc(3000);
-  const deg = lerp(0, 16, t);
-  return (
-    <IllusWrap label="Seated forward stretch">
-      <Floor y={110}/>
-      <line x1={52} y1={96} x2={140} y2={96} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <g transform={rot(96,66,deg)}>
-        <Head cx={96} cy={36}/><Seg x1={96} y1={45} x2={96} y2={66}/>
-        <Seg x1={96} y1={56} x2={72} y2={52}/><Seg x1={72} y1={52} x2={50} y2={55}/>
-        <Seg x1={96} y1={56} x2={120} y2={52}/><Seg x1={120} y1={52} x2={144} y2={49}/>
-        <Joint cx={72} cy={52}/><Joint cx={120} cy={52}/>
-      </g>
-      <Seg x1={96} y1={66} x2={76} y2={96}/><Seg x1={76} y1={96} x2={64} y2={110}/>
-      <Seg x1={96} y1={66} x2={116} y2={96}/><Seg x1={116} y1={96} x2={128} y2={110}/>
-      <Joint cx={76} cy={96}/><Joint cx={116} cy={96}/>
-    </IllusWrap>
-  );
-}
-
-// 8 ── Seated leg raise
-function IllusSeatedLeg() {
-  const t = useOsc(3000);
-  const deg = lerp(0, -22, t);
-  return (
-    <IllusWrap label="Seated leg raise">
-      <Floor y={110}/>
-      <line x1={35} y1={96} x2={140} y2={96} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <Head cx={86} cy={38}/><Seg x1={86} y1={47} x2={86} y2={68}/>
-      <Seg x1={86} y1={59} x2={68} y2={64}/><Seg x1={68} y1={64} x2={54} y2={70}/>
-      <Seg x1={86} y1={59} x2={103} y2={62}/><Seg x1={103} y1={62} x2={114} y2={68}/>
-      <Joint cx={68} cy={64}/><Joint cx={103} cy={62}/>
-      <Seg x1={86} y1={68} x2={65} y2={96}/><Seg x1={65} y1={96} x2={57} y2={110}/>
-      <Joint cx={65} cy={96}/>
-      <g transform={rot(106,72,deg)}>
-        <Seg x1={86} y1={68} x2={106} y2={72}/><Seg x1={106} y1={72} x2={162} y2={70}/>
-        <Joint cx={106} cy={72}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 9 ── Standing quad stretch
-function IllusStandingQuad() {
-  const t = useOsc(3500);
-  const deg = lerp(0, 22, t);
-  return (
-    <IllusWrap label="Standing quad stretch">
-      <Floor y={110}/>
-      <Head cx={106} cy={16}/><Seg x1={106} y1={25} x2={106} y2={58}/>
-      <Seg x1={106} y1={42} x2={80} y2={52}/><Seg x1={80} y1={52} x2={62} y2={47}/>
-      <Seg x1={106} y1={42} x2={128} y2={58}/><Seg x1={128} y1={58} x2={138} y2={84}/>
-      <Joint cx={80} cy={52}/><Joint cx={128} cy={58}/>
-      <Seg x1={106} y1={58} x2={102} y2={88}/><Seg x1={102} y1={88} x2={100} y2={110}/>
-      <Joint cx={102} cy={88}/>
-      <g transform={rot(106,58,deg)}>
-        <Seg x1={106} y1={58} x2={124} y2={80}/><Seg x1={124} y1={80} x2={138} y2={58}/>
-        <Joint cx={124} cy={80}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 10 ── Calf stretch
-function IllusStandingCalf() {
-  const t = useOsc(3000);
-  const dx = lerp(0, 8, t); const dy = lerp(0, 5, t);
-  return (
-    <IllusWrap label="Calf / Achilles stretch">
-      <Floor y={110}/>
-      <Wall x={44} y1={5} y2={110}/>
-      <Head cx={96} cy={24}/><Seg x1={96} y1={33} x2={86} y2={66}/>
-      <Seg x1={86} y1={48} x2={65} y2={44}/><Seg x1={65} y1={44} x2={44} y2={42}/>
-      <Seg x1={86} y1={52} x2={65} y2={54}/><Seg x1={65} y1={54} x2={44} y2={56}/>
-      <Joint cx={65} cy={44}/><Joint cx={65} cy={54}/>
-      <Seg x1={86} y1={66} x2={76} y2={90}/><Seg x1={76} y1={90} x2={70} y2={110}/>
-      <Joint cx={76} cy={90}/>
-      <g transform={tr(dx,dy)}>
-        <Seg x1={86} y1={66} x2={112} y2={94}/><Seg x1={112} y1={94} x2={118} y2={110}/>
-        <Joint cx={112} cy={94}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 11 ── Hamstring stretch
-function IllusStandingHamstring() {
-  const t = useOsc(3000);
-  const deg = lerp(0, 14, t);
-  return (
-    <IllusWrap label="Hamstring stretch">
-      <Floor y={110}/>
-      <line x1={116} y1={90} x2={192} y2={90} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <g transform={rot(84,58,deg)}>
-        <Head cx={84} cy={24}/><Seg x1={84} y1={33} x2={84} y2={58}/>
-        <Seg x1={84} y1={46} x2={60} y2={54}/><Seg x1={60} y1={54} x2={44} y2={62}/>
-        <Seg x1={84} y1={46} x2={106} y2={54}/><Seg x1={106} y1={54} x2={124} y2={58}/>
-        <Joint cx={60} cy={54}/><Joint cx={106} cy={54}/>
-      </g>
-      <Seg x1={84} y1={58} x2={78} y2={88}/><Seg x1={78} y1={88} x2={76} y2={110}/>
-      <Joint cx={78} cy={88}/>
-      <Seg x1={84} y1={58} x2={134} y2={62}/><Seg x1={134} y1={62} x2={166} y2={90}/>
-      <Joint cx={134} cy={62}/>
-    </IllusWrap>
-  );
-}
-
-// 12 ── Wall slide
-function IllusWallSlide() {
-  const t = useOsc(3000);
-  const dy = lerp(0, 12, t);
-  return (
-    <IllusWrap label="Wall slide / squat">
-      <Floor y={110}/>
-      <Wall x={160} y1={5} y2={110}/>
-      <g transform={tr(0,dy)}>
-        <Head cx={106} cy={22}/><Seg x1={106} y1={31} x2={108} y2={66}/>
-        <Seg x1={108} y1={48} x2={86} y2={52}/><Seg x1={86} y1={52} x2={68} y2={50}/>
-        <Seg x1={108} y1={48} x2={128} y2={46}/>
-        <Joint cx={86} cy={52}/><Joint cx={128} cy={46}/>
-        <Seg x1={108} y1={66} x2={83} y2={94}/><Seg x1={83} y1={94} x2={74} y2={110}/>
-        <Seg x1={108} y1={66} x2={134} y2={92}/><Seg x1={134} y1={92} x2={140} y2={110}/>
-        <Joint cx={83} cy={94}/><Joint cx={134} cy={92}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 13 ── Pendulum
-function IllusShoulderPendulum() {
-  const t = useOsc(2000);
-  const deg = lerp(-22, 22, t);
-  return (
-    <IllusWrap label="Pendulum swing">
-      <Floor y={110}/>
-      <line x1={28} y1={60} x2={92} y2={60} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <Head cx={60} cy={33}/><Seg x1={60} y1={42} x2={60} y2={60}/>
-      <Seg x1={60} y1={60} x2={120} y2={60}/>
-      <Seg x1={120} y1={60} x2={116} y2={90}/><Seg x1={116} y1={90} x2={112} y2={110}/>
-      <Seg x1={120} y1={60} x2={136} y2={90}/><Seg x1={136} y1={90} x2={138} y2={110}/>
-      <Joint cx={116} cy={90}/><Joint cx={136} cy={90}/>
-      <g transform={rot(120,60,deg)}>
-        <Seg x1={120} y1={60} x2={130} y2={90}/><Seg x1={130} y1={90} x2={128} y2={108}/>
-        <Joint cx={130} cy={90}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 14 ── Neck tilt
-function IllusNeckTilt() {
-  const t = useOsc(3000);
-  const deg = lerp(0, 18, t);
-  return (
-    <IllusWrap label="Cervical side-bend">
-      <line x1={38} y1={108} x2={164} y2={108} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <Seg x1={100} y1={62} x2={100} y2={82}/>
-      <Seg x1={100} y1={72} x2={82} y2={64}/><Seg x1={82} y1={64} x2={72} y2={53}/>
-      <Seg x1={100} y1={72} x2={118} y2={65}/><Seg x1={118} y1={65} x2={128} y2={72}/>
-      <Joint cx={82} cy={64}/><Joint cx={118} cy={65}/>
-      <Seg x1={100} y1={82} x2={82} y2={108}/><Seg x1={100} y1={82} x2={118} y2={108}/>
-      <Joint cx={100} cy={82}/>
-      <g transform={rot(100,62,deg)}>
-        <Head cx={100} cy={40}/><Seg x1={100} y1={49} x2={100} y2={62}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 15 ── Plank
-function IllusPlank() {
-  const t = useOsc(4000);
-  const op = lerp(0.7, 1.0, t);
-  return (
-    <IllusWrap label="Plank hold">
-      <Floor y={100}/>
-      <g opacity={op}>
-        <Head cx={22} cy={65}/><Seg x1={31} y1={71} x2={160} y2={80}/>
-        <Seg x1={58} y1={73} x2={55} y2={100}/><Seg x1={72} y1={74} x2={69} y2={100}/>
-        <Seg x1={144} y1={79} x2={146} y2={100}/><Seg x1={154} y1={80} x2={157} y2={100}/>
-        <Joint cx={58} cy={73}/><Joint cx={72} cy={74}/>
-        <Joint cx={144} cy={79}/><Joint cx={154} cy={80}/>
-      </g>
-      <line x1={22} y1={60} x2={162} y2={74} stroke={T2} strokeWidth={1} strokeDasharray="4 3"/>
-    </IllusWrap>
-  );
-}
-
-// 16 ── Ankle pump
-function IllusAnklePump() {
-  const t = useOsc(1800);
-  const degL = lerp(0,  20, t);
-  const degR = lerp(0, -20, t);
-  return (
-    <IllusWrap label="Ankle pumps">
-      <line x1={38} y1={106} x2={164} y2={106} stroke="rgba(45,212,191,0.25)" strokeWidth={2}/>
-      <Head cx={100} cy={24}/><Seg x1={100} y1={33} x2={100} y2={57}/>
-      <Seg x1={100} y1={45} x2={80} y2={51}/><Seg x1={80} y1={51} x2={66} y2={57}/>
-      <Seg x1={100} y1={45} x2={118} y2={48}/><Seg x1={118} y1={48} x2={132} y2={55}/>
-      <Joint cx={80} cy={51}/><Joint cx={118} cy={48}/>
-      <Seg x1={100} y1={57} x2={82} y2={82}/><Seg x1={82} y1={82} x2={76} y2={106}/>
-      <Seg x1={100} y1={57} x2={118} y2={82}/><Seg x1={118} y1={82} x2={122} y2={106}/>
-      <Joint cx={82} cy={82}/><Joint cx={118} cy={82}/>
-      <g transform={rot(76,106,degL)}><Seg x1={76} y1={106} x2={56} y2={106}/></g>
-      <g transform={rot(122,106,degR)}><Seg x1={122} y1={106} x2={142} y2={106}/></g>
-    </IllusWrap>
-  );
-}
-
-// 17 ── Single-leg balance
-function IllusStandingBalance() {
-  const t = useOsc(4000);
-  const deg = lerp(-3, 3, t);
-  return (
-    <IllusWrap label="Single-leg balance">
-      <Floor y={110}/>
-      <g transform={rot(100,110,deg)}>
-        <Head cx={100} cy={16}/><Seg x1={100} y1={25} x2={100} y2={60}/>
-        <Seg x1={100} y1={42} x2={76} y2={52}/><Seg x1={76} y1={52} x2={60} y2={49}/>
-        <Seg x1={100} y1={42} x2={124} y2={52}/><Seg x1={124} y1={52} x2={140} y2={49}/>
-        <Joint cx={76} cy={52}/><Joint cx={124} cy={52}/>
-        <Seg x1={100} y1={60} x2={96} y2={88}/><Seg x1={96} y1={88} x2={94} y2={110}/>
-        <Joint cx={96} cy={88}/>
-        <Seg x1={100} y1={60} x2={116} y2={80}/><Seg x1={116} y1={80} x2={114} y2={100}/>
-        <Joint cx={116} cy={80}/>
-      </g>
-    </IllusWrap>
-  );
-}
-
-// 18 ── Doorway stretch
-function IllusDoorfwayStretch() {
-  const t = useOsc(3000);
-  const dx = lerp(0, 7, t);
-  return (
-    <IllusWrap label="Doorway chest opener">
-      <Floor y={110}/>
-      <Wall x={38} y1={5} y2={110}/><Wall x={162} y1={5} y2={110}/>
-      <Head cx={100} cy={22}/><Seg x1={100} y1={31} x2={100} y2={70}/>
-      <g transform={tr(dx,0)}>
-        <Seg x1={100} y1={50} x2={70} y2={50}/><Seg x1={70} y1={50} x2={38} y2={50}/>
-        <Seg x1={100} y1={50} x2={130} y2={50}/><Seg x1={130} y1={50} x2={162} y2={50}/>
-        <Joint cx={70} cy={50}/><Joint cx={130} cy={50}/>
-      </g>
-      <Seg x1={100} y1={70} x2={90} y2={96}/><Seg x1={90} y1={96} x2={85} y2={110}/>
-      <Seg x1={100} y1={70} x2={112} y2={96}/><Seg x1={112} y1={96} x2={116} y2={110}/>
-      <Joint cx={90} cy={96}/><Joint cx={112} cy={96}/>
-    </IllusWrap>
-  );
-}
-
-const ILLUS_MAP = {
-  supine_knee_chest:   IllusSupineKneeChest,
-  supine_bridge:       IllusSupineBridge,
-  prone_press:         IllusPronePress,
-  side_lying_clam:     IllusSideLyingClam,
-  quadruped_bird_dog:  IllusQuadrupedBirdDog,
-  quadruped_cat_cow:   IllusQuadrupedCatCow,
-  seated_stretch:      IllusSeatedStretch,
-  seated_leg:          IllusSeatedLeg,
-  standing_quad:       IllusStandingQuad,
-  standing_calf:       IllusStandingCalf,
-  standing_hamstring:  IllusStandingHamstring,
-  wall_slide:          IllusWallSlide,
-  shoulder_pendulum:   IllusShoulderPendulum,
-  neck_tilt:           IllusNeckTilt,
-  plank:               IllusPlank,
-  ankle_pump:          IllusAnklePump,
-  standing_balance:    IllusStandingBalance,
-  doorway_stretch:     IllusDoorfwayStretch,
-};
-
-function ExerciseIllustration({ type }) {
-  const C = ILLUS_MAP[type];
-  if (!C) return null;
-  return <C />;
 }
 
 
@@ -898,11 +454,6 @@ function CaseDetail({ caseData, checkins, onCheckinsUpdate, onDelete }) {
                   {open?"▲":"▼"}
                 </span>
               </div>
-              {ex.illustrationType && (
-                <div style={{padding:"0 16px 4px", opacity: done ? 0.45 : 1, transition:"opacity 0.3s"}}>
-                  <ExerciseIllustration type={ex.illustrationType} />
-                </div>
-              )}
               {open && (
                 <div className="exercise-detail">
                   <p>{ex.instructions}</p>
