@@ -1,62 +1,56 @@
-/**
- * Vercel Serverless Function: /api/anthropic
- *
- * Proxies requests to the Anthropic API so the API key stays server-side
- * and is never exposed to the client.
- *
- * Set ANTHROPIC_API_KEY in your Vercel project's Environment Variables.
- */
+import https from 'https';
 
 export default async function handler(req, res) {
-  // CORS headers (needed for local dev; Vercel handles this in prod)
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not configured on the server.' })
-  }
+  const body = JSON.stringify({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1500,
+    system: req.body.system,
+    messages: req.body.messages,
+  });
 
-  const { system, messages } = req.body
-
-  if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Invalid request: messages array required.' })
-  }
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
+        'Content-Length': Buffer.byteLength(body),
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        system,
-        messages,
-      }),
-    })
+    };
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}))
-      return res.status(response.status).json({ error: error?.error?.message || 'Anthropic API error' })
-    }
+    const request = https.request(options, (response) => {
+      let data = '';
+      response.on('data', chunk => { data += chunk; });
+      response.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          res.status(response.statusCode).json(parsed);
+        } catch {
+          res.status(500).json({ error: 'Failed to parse Anthropic response' });
+        }
+        resolve();
+      });
+    });
 
-    const data = await response.json()
-    return res.status(200).json(data)
-  } catch (err) {
-    console.error('[api/anthropic]', err)
-    return res.status(500).json({ error: 'Internal server error' })
-  }
+    request.on('error', (err) => {
+      res.status(500).json({ error: err.message });
+      resolve();
+    });
+
+    request.write(body);
+    request.end();
+  });
 }
