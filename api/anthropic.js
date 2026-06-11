@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   }
 
   const body = JSON.stringify({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1500,
     system: req.body.system,
     messages: req.body.messages,
